@@ -1,5 +1,5 @@
 /**
- * Tail Swing - Main Game Controller & Canvas Loop
+ * Tail Swing - Main Game Controller & Infinite Game Loop
  */
 
 class Game {
@@ -10,8 +10,7 @@ class Game {
     this.physics = new PhysicsEngine();
     this.ui = new UIManager(this);
 
-    this.currentLevelIndex = 0;
-    this.level = null;
+    this.levelGen = new InfiniteLevelGenerator();
     this.player = null;
 
     this.camera = { x: 0, y: 0 };
@@ -19,13 +18,11 @@ class Game {
     this.isPaused = false;
 
     this.inputActive = false;
-
-    this.platformImage = new Image();
-    this.platformImage.src = 'assets/platforms/6_Mini Pals Tag platforms-01.png';
+    this.distanceScore = 0;
 
     this.initCanvasSize();
     this.setupInputs();
-    this.loadLevel(0);
+    this.resetGame();
 
     requestAnimationFrame(this.loop.bind(this));
   }
@@ -47,7 +44,6 @@ class Game {
       this.inputActive = true;
       if (this.player) {
         this.player.isInputActive = true;
-        this.triggerSwing();
       }
     };
 
@@ -55,7 +51,9 @@ class Game {
       this.inputActive = false;
       if (this.player) {
         this.player.isInputActive = false;
-        this.releaseSwing();
+        if (this.player.isSwinging) {
+          this.physics.detachRope(this.player);
+        }
       }
     };
 
@@ -77,23 +75,16 @@ class Game {
     });
   }
 
-  loadLevel(index) {
-    this.currentLevelIndex = index;
-    const template = LEVELS[index] || LEVELS[0];
-
-    // Deep clone level state
-    this.level = {
-      ...template,
-      coins: template.coins.map(c => ({ ...c, collected: false }))
-    };
+  resetGame() {
+    this.levelGen.reset();
 
     this.player = {
-      x: template.playerStart.x,
-      y: template.playerStart.y,
-      vx: template.playerStart.vx,
-      vy: template.playerStart.vy,
+      x: 100,
+      y: 480,
+      vx: 6,
+      vy: -2,
       radius: 20,
-      state: 'IDLE', // IDLE, SWINGING, FALLING, DEAD, WIN
+      state: 'FALLING',
       isSwinging: false,
       ropeAnchor: null,
       ropeLength: 0,
@@ -101,16 +92,17 @@ class Game {
       angle: 0,
       rotation: 0,
       coinsCollected: 0,
-      isInputActive: false
+      isInputActive: this.inputActive
     };
 
-    this.camera.x = this.player.x - this.canvas.width / 3;
-    this.camera.y = this.player.y - this.canvas.height / 2;
+    this.distanceScore = 0;
+    this.camera.x = 0;
+    this.camera.y = 0;
     this.ui.updateHUD();
   }
 
-  startLevel(index) {
-    this.loadLevel(index);
+  startLevel() {
+    this.resetGame();
     this.isRunning = true;
     this.isPaused = false;
   }
@@ -123,83 +115,47 @@ class Game {
     this.isPaused = false;
   }
 
-  triggerSwing() {
-    if (!this.player || this.player.state === 'DEAD' || this.player.state === 'WIN') return;
-
-    // Find best anchor ahead
-    const bestAnchor = this.physics.findBestAnchor(this.player, this.level.anchors);
-    if (bestAnchor) {
-      this.player.isSwinging = true;
-      this.player.ropeAnchor = bestAnchor;
-
-      const dx = this.player.x - bestAnchor.x;
-      const dy = this.player.y - bestAnchor.y;
-      this.player.ropeLength = Math.hypot(dx, dy);
-
-      // Convert current linear velocity into angular velocity
-      const angle = Math.atan2(dy, dx);
-      // Tangential velocity component
-      const tangentX = -Math.sin(angle);
-      const tangentY = Math.cos(angle);
-      const dot = this.player.vx * tangentX + this.player.vy * tangentY;
-
-      this.player.angularVelocity = dot / this.player.ropeLength;
-      this.player.angle = angle;
-      this.player.state = 'SWINGING';
-
-      if (window.audioEngine) window.audioEngine.playSwing();
-    }
-  }
-
-  releaseSwing() {
-    if (!this.player || !this.player.isSwinging) return;
-
-    this.player.isSwinging = false;
-    this.player.ropeAnchor = null;
-    this.player.state = 'FALLING';
-
-    // Boost release velocity
-    this.player.vx *= 1.25;
-    this.player.vy *= 1.15;
-  }
-
   update() {
     if (!this.isRunning || this.isPaused) return;
 
-    // Physics step
-    this.physics.updatePlayer(this.player, this.level);
+    // Procedural level generation ahead of player
+    this.levelGen.generateAhead(this.player.x + 2500);
+    this.levelGen.cleanupBehind(this.camera.x - 500);
 
-    // Update camera smooth follow
+    // Physics step
+    this.physics.updatePlayer(this.player, this.levelGen);
+
+    // Update Distance Score (meters)
+    this.distanceScore = Math.max(this.distanceScore, Math.floor(this.player.x / 10));
+    this.ui.updateHUD();
+
+    // Smooth Camera Follow
     const targetCamX = this.player.x - this.canvas.width / 3;
     const targetCamY = Math.max(0, this.player.y - this.canvas.height / 2);
     this.camera.x += (targetCamX - this.camera.x) * 0.1;
     this.camera.y += (targetCamY - this.camera.y) * 0.1;
 
-    // Check game outcome state transitions
+    // Check Player Death
     if (this.player.state === 'DEAD') {
       this.isRunning = false;
-      setTimeout(() => this.ui.showResultScreen(false, 0), 400);
-    } else if (this.player.state === 'WIN') {
-      this.isRunning = false;
-      setTimeout(() => this.ui.showResultScreen(true, this.player.coinsCollected), 400);
+      setTimeout(() => this.ui.showGameOverScreen(this.distanceScore, this.player.coinsCollected), 400);
     }
   }
 
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    if (!this.level || !this.player) return;
+    if (!this.player) return;
 
     this.ctx.save();
-    // Apply Camera Translation
     this.ctx.translate(-this.camera.x, -this.camera.y);
 
-    // 1. Render Sky Background & Clouds
+    // 1. Sky Background & Parallax Clouds
     this.renderBackground();
 
-    // 2. Render Platforms
-    if (this.level.platforms) {
-      for (const p of this.level.platforms) {
+    // 2. Platforms
+    if (this.levelGen.platforms) {
+      for (const p of this.levelGen.platforms) {
         if (p.type === 'bouncy') {
           this.ctx.fillStyle = '#ff4081';
           this.ctx.strokeStyle = '#c2185b';
@@ -220,10 +176,10 @@ class Game {
       }
     }
 
-    // 3. Render Hazards / Spikes
-    if (this.level.hazards) {
+    // 3. Hazard Spikes
+    if (this.levelGen.hazards) {
       this.ctx.fillStyle = '#e53935';
-      for (const h of this.level.hazards) {
+      for (const h of this.levelGen.hazards) {
         const spikeCount = Math.floor(h.w / 20);
         for (let i = 0; i < spikeCount; i++) {
           this.ctx.beginPath();
@@ -236,9 +192,9 @@ class Game {
       }
     }
 
-    // 4. Render Swing Anchors & Targeted Anchor Ring
-    const bestAnchor = this.physics.findBestAnchor(this.player, this.level.anchors);
-    for (const a of this.level.anchors) {
+    // 4. Swing Anchors & Target Indicator
+    const bestAnchor = this.physics.findBestAnchor(this.player, this.levelGen.anchors);
+    for (const a of this.levelGen.anchors) {
       this.ctx.beginPath();
       this.ctx.arc(a.x, a.y, 14, 0, Math.PI * 2);
       this.ctx.fillStyle = '#ffb74d';
@@ -247,7 +203,6 @@ class Game {
       this.ctx.strokeStyle = '#f57c00';
       this.ctx.stroke();
 
-      // Highlight closest active target anchor
       if (a === bestAnchor && !this.player.isSwinging) {
         this.ctx.beginPath();
         this.ctx.arc(a.x, a.y, 22, 0, Math.PI * 2);
@@ -259,7 +214,7 @@ class Game {
       }
     }
 
-    // 5. Render Rope / Tail
+    // 5. Swing Tail / Rope
     if (this.player.isSwinging && this.player.ropeAnchor) {
       this.ctx.beginPath();
       this.ctx.moveTo(this.player.ropeAnchor.x, this.player.ropeAnchor.y);
@@ -268,16 +223,15 @@ class Game {
       this.ctx.strokeStyle = '#3e2723';
       this.ctx.stroke();
 
-      // Rope Joint Anchor Point
       this.ctx.beginPath();
       this.ctx.arc(this.player.ropeAnchor.x, this.player.ropeAnchor.y, 6, 0, Math.PI * 2);
       this.ctx.fillStyle = '#ff5722';
       this.ctx.fill();
     }
 
-    // 6. Render Collectible Coins
-    if (this.level.coins) {
-      for (const c of this.level.coins) {
+    // 6. Collectible Coins
+    if (this.levelGen.coins) {
+      for (const c of this.levelGen.coins) {
         if (!c.collected) {
           this.ctx.beginPath();
           this.ctx.arc(c.x, c.y, 14, 0, Math.PI * 2);
@@ -296,25 +250,7 @@ class Game {
       }
     }
 
-    // 7. Render Goal / Flag
-    if (this.level.goal) {
-      const g = this.level.goal;
-      this.ctx.beginPath();
-      this.ctx.arc(g.x, g.y, g.radius || 25, 0, Math.PI * 2);
-      this.ctx.fillStyle = 'rgba(0, 230, 118, 0.4)';
-      this.ctx.fill();
-      this.ctx.lineWidth = 4;
-      this.ctx.strokeStyle = '#00e676';
-      this.ctx.stroke();
-
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.font = 'bold 20px sans-serif';
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText('🏁', g.x, g.y);
-    }
-
-    // 8. Render Player Avatar
+    // 7. Player Avatar
     this.ui.drawPlayerAvatar(
       this.ctx,
       this.player.x,
@@ -329,7 +265,6 @@ class Game {
   }
 
   renderBackground() {
-    // Parallax background clouds
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     const cloudPositions = [
       { x: 200, y: 150, r: 40 },

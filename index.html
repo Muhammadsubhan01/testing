@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Tail Swing - Mini Pals</title>
+  <title>Tail Swing - Endless Mini Pals</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,35 +13,26 @@
     <!-- HUD Overlay -->
     <div id="hud" class="overlay">
       <div class="hud-top">
-        <div class="hud-box" id="hud-level">Level 1</div>
+        <div class="hud-box" id="hud-score">Distance: <span id="dist-count">0</span>m</div>
         <div class="hud-box" id="hud-coins">🪙 <span id="coin-count">0</span></div>
         <div class="hud-buttons">
           <button id="btn-sound" class="icon-btn">🔊</button>
           <button id="btn-pause" class="icon-btn">⏸️</button>
         </div>
       </div>
-      <div id="tutorial-msg" class="tutorial-text">Click / Tap or press SPACEBAR to Swing!</div>
+      <div id="tutorial-msg" class="tutorial-text">Hold Click / Spacebar to Swing endlessly!</div>
     </div>
 
     <!-- Main Menu Overlay -->
     <div id="menu-overlay" class="overlay screen-overlay active">
       <div class="menu-card">
         <h1 class="game-title">TAIL SWING</h1>
-        <p class="subtitle">Mini Pals Adventure</p>
+        <p class="subtitle">Endless Adventure</p>
+        <div class="high-score-badge">BEST: <span id="best-score-menu">0</span>m</div>
         <div class="menu-buttons">
           <button id="btn-play" class="btn primary-btn">PLAY</button>
-          <button id="btn-levels-menu" class="btn secondary-btn">LEVELS</button>
           <button id="btn-shop-menu" class="btn secondary-btn">SHOP 🐾</button>
         </div>
-      </div>
-    </div>
-
-    <!-- Level Select Overlay -->
-    <div id="level-overlay" class="overlay screen-overlay hidden">
-      <div class="menu-card wide-card">
-        <h2>SELECT LEVEL</h2>
-        <div id="level-grid" class="level-grid"></div>
-        <button id="btn-level-back" class="btn secondary-btn">BACK</button>
       </div>
     </div>
 
@@ -69,14 +60,17 @@
       </div>
     </div>
 
-    <!-- Game Over / Win Overlay -->
+    <!-- Game Over / Result Overlay -->
     <div id="result-overlay" class="overlay screen-overlay hidden">
       <div class="menu-card">
-        <h2 id="result-title">LEVEL COMPLETE!</h2>
-        <p id="result-subtitle">Coins Collected: +<span id="earned-coins">0</span></p>
+        <h2 id="result-title">GAME OVER</h2>
+        <div class="result-stats">
+          <p>Distance: <strong id="final-dist">0</strong>m</p>
+          <p>Best Record: <strong id="best-dist">0</strong>m</p>
+          <p>Coins Collected: +<span id="earned-coins">0</span></p>
+        </div>
         <div class="menu-buttons">
-          <button id="btn-next-level" class="btn primary-btn">NEXT LEVEL</button>
-          <button id="btn-restart-result" class="btn secondary-btn">RETRY</button>
+          <button id="btn-restart-result" class="btn primary-btn">PLAY AGAIN</button>
           <button id="btn-menu-result" class="btn secondary-btn">MAIN MENU</button>
         </div>
       </div>

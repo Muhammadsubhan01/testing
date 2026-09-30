@@ -1,110 +1,65 @@
 /**
- * Tail Swing - Main Game Controller & Infinite Game Loop
+ * 1010 Color Match - Main Game Controller & Interaction Handler
  */
 
 class Game {
   constructor() {
-    this.canvas = document.getElementById('gameCanvas');
-    this.ctx = this.canvas.getContext('2d');
-
-    this.physics = new PhysicsEngine();
+    this.engine = new ColorMatchEngine(10, 10);
     this.ui = new UIManager(this);
 
-    this.levelGen = new InfiniteLevelGenerator();
-    this.player = null;
+    this.score = 0;
+    this.highScore = parseInt(localStorage.getItem('1010_colormatch_highscore')) || 0;
 
-    this.camera = { x: 0, y: 0 };
+    this.trayShapes = [null, null, null];
+    this.draggingShapeIndex = -1;
+    this.dragOffset = { x: 0, y: 0 };
+    this.dragPos = { x: 0, y: 0 };
+    this.hoverCell = null;
+
     this.isRunning = false;
     this.isPaused = false;
+    this.comboCount = 0;
 
-    this.inputActive = false;
-    this.distanceScore = 0;
+    this.particles = [];
+    this.scorePopups = [];
 
-    this.initCanvasSize();
-    this.setupInputs();
-    this.resetGame();
-
-    requestAnimationFrame(this.loop.bind(this));
+    this.initTray();
+    this.setupEvents();
+    this.ui.updateScores(this.score, this.highScore);
   }
 
-  initCanvasSize() {
-    const container = document.getElementById('game-container');
-    this.canvas.width = container.clientWidth || 1280;
-    this.canvas.height = container.clientHeight || 720;
-
-    window.addEventListener('resize', () => {
-      this.canvas.width = container.clientWidth || 1280;
-      this.canvas.height = container.clientHeight || 720;
-    });
+  initTray() {
+    for (let i = 0; i < 3; i++) {
+      if (!this.trayShapes[i]) {
+        this.trayShapes[i] = this.engine.generateShape();
+      }
+    }
   }
 
-  setupInputs() {
-    const handleStart = (e) => {
-      if (e.target.tagName === 'BUTTON' || e.target.closest('.screen-overlay')) return;
-      this.inputActive = true;
-      if (this.player) {
-        this.player.isInputActive = true;
+  refillTrayIfNeeded() {
+    const allEmpty = this.trayShapes.every(shape => shape === null);
+    if (allEmpty) {
+      for (let i = 0; i < 3; i++) {
+        this.trayShapes[i] = this.engine.generateShape();
       }
-    };
-
-    const handleEnd = (e) => {
-      this.inputActive = false;
-      if (this.player) {
-        this.player.isInputActive = false;
-        if (this.player.isSwinging) {
-          this.physics.detachRope(this.player);
-        }
-      }
-    };
-
-    window.addEventListener('mousedown', handleStart);
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchstart', handleStart, { passive: true });
-    window.addEventListener('touchend', handleEnd, { passive: true });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !e.repeat) {
-        handleStart(e);
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'Space') {
-        handleEnd(e);
-      }
-    });
+    }
   }
 
-  resetGame() {
-    this.levelGen.reset();
+  startNewGame() {
+    this.engine.reset();
+    this.score = 0;
+    this.comboCount = 0;
+    this.particles = [];
+    this.scorePopups = [];
+    this.trayShapes = [null, null, null];
+    this.initTray();
 
-    this.player = {
-      x: 100,
-      y: 480,
-      vx: 6,
-      vy: -2,
-      radius: 20,
-      state: 'FALLING',
-      isSwinging: false,
-      ropeAnchor: null,
-      ropeLength: 0,
-      angularVelocity: 0,
-      angle: 0,
-      rotation: 0,
-      coinsCollected: 0,
-      isInputActive: this.inputActive
-    };
-
-    this.distanceScore = 0;
-    this.camera.x = 0;
-    this.camera.y = 0;
-    this.ui.updateHUD();
-  }
-
-  startLevel() {
-    this.resetGame();
     this.isRunning = true;
     this.isPaused = false;
+
+    this.ui.updateScores(this.score, this.highScore);
+    this.ui.renderTray(this.trayShapes);
+    this.ui.renderBoard(this.engine, null, this.draggingShapeIndex >= 0 ? this.trayShapes[this.draggingShapeIndex] : null, this.hoverCell);
   }
 
   pause() {
@@ -115,180 +70,197 @@ class Game {
     this.isPaused = false;
   }
 
-  update() {
-    if (!this.isRunning || this.isPaused) return;
+  setupEvents() {
+    const canvas = document.getElementById('gameCanvas');
 
-    // Procedural level generation ahead of player
-    this.levelGen.generateAhead(this.player.x + 2500);
-    this.levelGen.cleanupBehind(this.camera.x - 500);
+    const getCanvasPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+      };
+    };
 
-    // Physics step
-    this.physics.updatePlayer(this.player, this.levelGen);
+    const handlePointerDownTray = (index, e) => {
+      if (!this.isRunning || this.isPaused || !this.trayShapes[index]) return;
+      this.draggingShapeIndex = index;
 
-    // Update Distance Score (meters)
-    this.distanceScore = Math.max(this.distanceScore, Math.floor(this.player.x / 10));
-    this.ui.updateHUD();
+      const pos = getCanvasPos(e);
+      this.dragPos = pos;
+      if (window.audioEngine) window.audioEngine.playPickup();
+    };
 
-    // Smooth Camera Follow
-    const targetCamX = this.player.x - this.canvas.width / 3;
-    const targetCamY = Math.max(0, this.player.y - this.canvas.height / 2);
-    this.camera.x += (targetCamX - this.camera.x) * 0.1;
-    this.camera.y += (targetCamY - this.camera.y) * 0.1;
-
-    // Check Player Death
-    if (this.player.state === 'DEAD') {
-      this.isRunning = false;
-      setTimeout(() => this.ui.showGameOverScreen(this.distanceScore, this.player.coinsCollected), 400);
+    for (let i = 0; i < 3; i++) {
+      const shapeCanvas = document.getElementById(`shapeCanvas${i}`);
+      shapeCanvas.addEventListener('mousedown', (e) => handlePointerDownTray(i, e));
+      shapeCanvas.addEventListener('touchstart', (e) => handlePointerDownTray(i, e), { passive: true });
     }
+
+    const handlePointerMove = (e) => {
+      if (this.draggingShapeIndex < 0) return;
+
+      const pos = getCanvasPos(e);
+      this.dragPos = pos;
+
+      // Calculate grid cell hover
+      const shape = this.trayShapes[this.draggingShapeIndex];
+      const cellSize = canvas.width / 10;
+
+      // Center offset alignment for shape drag preview
+      const targetCol = Math.round((pos.x - (shape.cols * cellSize) / 2) / cellSize);
+      const targetRow = Math.round((pos.y - (shape.rows * cellSize) / 2) / cellSize);
+
+      if (targetRow >= 0 && targetRow <= 10 - shape.rows && targetCol >= 0 && targetCol <= 10 - shape.cols) {
+        this.hoverCell = { r: targetRow, c: targetCol, valid: this.engine.canPlaceShape(shape, targetRow, targetCol) };
+      } else {
+        this.hoverCell = null;
+      }
+    };
+
+    const handlePointerUp = (e) => {
+      if (this.draggingShapeIndex < 0) return;
+
+      const shape = this.trayShapes[this.draggingShapeIndex];
+      if (this.hoverCell && this.hoverCell.valid) {
+        const blocksPlaced = this.engine.placeShape(shape, this.hoverCell.r, this.hoverCell.c);
+        if (blocksPlaced > 0) {
+          this.score += blocksPlaced * 10;
+          this.trayShapes[this.draggingShapeIndex] = null;
+          if (window.audioEngine) window.audioEngine.playPlace();
+
+          this.checkAndProcessMatches();
+          this.refillTrayIfNeeded();
+
+          // Check for Game Over
+          if (!this.engine.hasAnyValidMove(this.trayShapes)) {
+            setTimeout(() => this.gameOver(), 500);
+          }
+        }
+      }
+
+      this.draggingShapeIndex = -1;
+      this.hoverCell = null;
+      this.ui.renderTray(this.trayShapes);
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('touchmove', handlePointerMove, { passive: true });
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchend', handlePointerUp, { passive: true });
+
+    // Game Animation Loop
+    const loop = () => {
+      this.updateAnimations();
+      if (this.isRunning) {
+        this.ui.renderBoard(
+          this.engine,
+          this.particles,
+          this.draggingShapeIndex >= 0 ? this.trayShapes[this.draggingShapeIndex] : null,
+          this.hoverCell,
+          this.dragPos,
+          this.scorePopups
+        );
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
   }
 
-  render() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  checkAndProcessMatches() {
+    const { clusters, matchedCoords } = this.engine.findMatches();
 
-    if (!this.player) return;
+    if (matchedCoords.length > 0) {
+      this.comboCount++;
+      const basePoints = matchedCoords.length * 20;
+      const comboBonus = this.comboCount > 1 ? (this.comboCount - 1) * 50 : 0;
+      const pointsEarned = basePoints + comboBonus;
 
-    this.ctx.save();
-    this.ctx.translate(-this.camera.x, -this.camera.y);
+      this.score += pointsEarned;
+      if (this.score > this.highScore) {
+        this.highScore = this.score;
+        localStorage.setItem('1010_colormatch_highscore', this.highScore);
+      }
 
-    // 1. Sky Background & Parallax Clouds
-    this.renderBackground();
+      this.ui.updateScores(this.score, this.highScore);
 
-    // 2. Platforms
-    if (this.levelGen.platforms) {
-      for (const p of this.levelGen.platforms) {
-        if (p.type === 'bouncy') {
-          this.ctx.fillStyle = '#ff4081';
-          this.ctx.strokeStyle = '#c2185b';
-          this.ctx.lineWidth = 4;
-          this.ctx.beginPath();
-          this.ctx.roundRect(p.x, p.y, p.w, p.h, 10);
-          this.ctx.fill();
-          this.ctx.stroke();
+      // Create burst particles for matched blocks
+      const cellSize = 500 / 10;
+      for (const { r, c } of matchedCoords) {
+        const block = this.engine.grid[r][c];
+        const cx = c * cellSize + cellSize / 2;
+        const cy = r * cellSize + cellSize / 2;
+
+        for (let p = 0; p < 8; p++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 4 + 2;
+          this.particles.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: Math.random() * 5 + 3,
+            color: block ? block.fill : '#ffd54f',
+            life: 1.0
+          });
+        }
+      }
+
+      // Add floating score text popup
+      const firstCoord = matchedCoords[0];
+      this.scorePopups.push({
+        text: this.comboCount > 1 ? `COMBO x${this.comboCount}! +${pointsEarned}` : `+${pointsEarned}`,
+        x: firstCoord.c * cellSize + cellSize,
+        y: firstCoord.r * cellSize + cellSize / 2,
+        life: 1.0
+      });
+
+      if (window.audioEngine) {
+        if (this.comboCount > 1) {
+          window.audioEngine.playCombo(this.comboCount);
         } else {
-          this.ctx.fillStyle = '#4caf50';
-          this.ctx.strokeStyle = '#2e7d32';
-          this.ctx.lineWidth = 4;
-          this.ctx.beginPath();
-          this.ctx.roundRect(p.x, p.y, p.w, p.h, 8);
-          this.ctx.fill();
-          this.ctx.stroke();
+          window.audioEngine.playMatch();
         }
       }
-    }
 
-    // 3. Hazard Spikes
-    if (this.levelGen.hazards) {
-      this.ctx.fillStyle = '#e53935';
-      for (const h of this.levelGen.hazards) {
-        const spikeCount = Math.floor(h.w / 20);
-        for (let i = 0; i < spikeCount; i++) {
-          this.ctx.beginPath();
-          this.ctx.moveTo(h.x + i * 20, h.y + h.h);
-          this.ctx.lineTo(h.x + i * 20 + 10, h.y);
-          this.ctx.lineTo(h.x + (i + 1) * 20, h.y + h.h);
-          this.ctx.closePath();
-          this.ctx.fill();
-        }
-      }
-    }
-
-    // 4. Swing Anchors & Target Indicator
-    const bestAnchor = this.physics.findBestAnchor(this.player, this.levelGen.anchors);
-    for (const a of this.levelGen.anchors) {
-      this.ctx.beginPath();
-      this.ctx.arc(a.x, a.y, 14, 0, Math.PI * 2);
-      this.ctx.fillStyle = '#ffb74d';
-      this.ctx.fill();
-      this.ctx.lineWidth = 3;
-      this.ctx.strokeStyle = '#f57c00';
-      this.ctx.stroke();
-
-      if (a === bestAnchor && !this.player.isSwinging) {
-        this.ctx.beginPath();
-        this.ctx.arc(a.x, a.y, 22, 0, Math.PI * 2);
-        this.ctx.strokeStyle = '#00e676';
-        this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([6, 6]);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-      }
-    }
-
-    // 5. Swing Tail / Rope
-    if (this.player.isSwinging && this.player.ropeAnchor) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(this.player.ropeAnchor.x, this.player.ropeAnchor.y);
-      this.ctx.lineTo(this.player.x, this.player.y);
-      this.ctx.lineWidth = 5;
-      this.ctx.strokeStyle = '#3e2723';
-      this.ctx.stroke();
-
-      this.ctx.beginPath();
-      this.ctx.arc(this.player.ropeAnchor.x, this.player.ropeAnchor.y, 6, 0, Math.PI * 2);
-      this.ctx.fillStyle = '#ff5722';
-      this.ctx.fill();
-    }
-
-    // 6. Collectible Coins
-    if (this.levelGen.coins) {
-      for (const c of this.levelGen.coins) {
-        if (!c.collected) {
-          this.ctx.beginPath();
-          this.ctx.arc(c.x, c.y, 14, 0, Math.PI * 2);
-          this.ctx.fillStyle = '#ffd54f';
-          this.ctx.fill();
-          this.ctx.lineWidth = 2;
-          this.ctx.strokeStyle = '#ff8f00';
-          this.ctx.stroke();
-
-          this.ctx.fillStyle = '#ff8f00';
-          this.ctx.font = 'bold 12px sans-serif';
-          this.ctx.textAlign = 'center';
-          this.ctx.textBaseline = 'middle';
-          this.ctx.fillText('$', c.x, c.y);
-        }
-      }
-    }
-
-    // 7. Player Avatar
-    this.ui.drawPlayerAvatar(
-      this.ctx,
-      this.player.x,
-      this.player.y,
-      this.ui.selectedSkin,
-      this.player.rotation,
-      1.2,
-      this.player.isSwinging
-    );
-
-    this.ctx.restore();
-  }
-
-  renderBackground() {
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    const cloudPositions = [
-      { x: 200, y: 150, r: 40 },
-      { x: 600, y: 100, r: 60 },
-      { x: 1100, y: 180, r: 50 },
-      { x: 1700, y: 120, r: 70 },
-      { x: 2300, y: 160, r: 45 },
-      { x: 2900, y: 110, r: 65 }
-    ];
-
-    for (const c of cloudPositions) {
-      const parallaxX = c.x + this.camera.x * 0.3;
-      this.ctx.beginPath();
-      this.ctx.arc(parallaxX, c.y, c.r, 0, Math.PI * 2);
-      this.ctx.arc(parallaxX + c.r * 0.6, c.y - c.r * 0.2, c.r * 0.7, 0, Math.PI * 2);
-      this.ctx.arc(parallaxX - c.r * 0.6, c.y - c.r * 0.2, c.r * 0.7, 0, Math.PI * 2);
-      this.ctx.fill();
+      this.engine.clearMatchedBlocks(matchedCoords);
+    } else {
+      this.comboCount = 0;
     }
   }
 
-  loop() {
-    this.update();
-    this.render();
-    requestAnimationFrame(this.loop.bind(this));
+  updateAnimations() {
+    // Update particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.03;
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+      }
+    }
+
+    // Update score popups
+    for (let i = this.scorePopups.length - 1; i >= 0; i--) {
+      const pop = this.scorePopups[i];
+      pop.y -= 1;
+      pop.life -= 0.02;
+      if (pop.life <= 0) {
+        this.scorePopups.splice(i, 1);
+      }
+    }
+  }
+
+  gameOver() {
+    this.isRunning = false;
+    if (this.score > this.highScore) {
+      this.highScore = this.score;
+      localStorage.setItem('1010_colormatch_highscore', this.highScore);
+    }
+    if (window.audioEngine) window.audioEngine.playGameOver();
+    this.ui.showGameOverScreen(this.score, this.highScore);
   }
 }
 

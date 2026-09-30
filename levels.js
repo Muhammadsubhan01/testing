@@ -1,103 +1,203 @@
 /**
- * Tail Swing - Infinite Level Generator
- * Procedurally generates an infinite level with swing anchors, platforms, bouncy pads, hazards, and coins.
+ * 1010 Color Match - Board & Color Matching Engine
  */
 
-class InfiniteLevelGenerator {
-  constructor() {
-    this.reset();
+const BLOCK_COLORS = [
+  { id: 1, name: 'red', fill: '#ff5252', stroke: '#d32f2f', light: '#ff8a80' },
+  { id: 2, name: 'blue', fill: '#448aff', stroke: '#1976d2', light: '#82b1ff' },
+  { id: 3, name: 'green', fill: '#66bb6a', stroke: '#388e3c', light: '#a5d6a7' },
+  { id: 4, name: 'yellow', fill: '#ffd54f', stroke: '#f57f17', light: '#ffe082' },
+  { id: 5, name: 'purple', fill: '#ab47bc', stroke: '#7b1fa2', light: '#ce93d8' },
+  { id: 6, name: 'orange', fill: '#ff9800', stroke: '#e65100', light: '#ffcc80' }
+];
+
+// Shape templates relative matrix offsets
+const SHAPE_TEMPLATES = [
+  // Single
+  { name: '1x1', matrix: [[1]] },
+  // 2x1 & 1x2
+  { name: '2x1_H', matrix: [[1, 1]] },
+  { name: '2x1_V', matrix: [[1], [1]] },
+  // 3x1 & 1x3
+  { name: '3x1_H', matrix: [[1, 1, 1]] },
+  { name: '3x1_V', matrix: [[1], [1], [1]] },
+  // 2x2 Square
+  { name: '2x2', matrix: [[1, 1], [1, 1]] },
+  // L-Shapes
+  { name: 'L_TL', matrix: [[1, 0], [1, 1]] },
+  { name: 'L_TR', matrix: [[0, 1], [1, 1]] },
+  { name: 'L_BL', matrix: [[1, 1], [1, 0]] },
+  { name: 'L_BR', matrix: [[1, 1], [0, 1]] },
+  // T-Shapes
+  { name: 'T_UP', matrix: [[0, 1, 0], [1, 1, 1]] },
+  { name: 'T_DOWN', matrix: [[1, 1, 1], [0, 1, 0]] },
+  // Diagonal 2
+  { name: 'Diag2_1', matrix: [[1, 0], [0, 1]] },
+  { name: 'Diag2_2', matrix: [[0, 1], [1, 0]] }
+];
+
+class ColorMatchEngine {
+  constructor(rows = 10, cols = 10) {
+    this.rows = rows;
+    this.cols = cols;
+    this.grid = Array.from({ length: rows }, () => Array(cols).fill(null));
   }
 
   reset() {
-    this.generatedX = 0;
-    this.width = 1000000; // Virtually infinite level width
-    this.height = 1000;
-    this.anchors = [];
-    this.platforms = [];
-    this.hazards = [];
-    this.coins = [];
-    this.nextAnchorId = 1;
-
-    // Initial starting platform for the player
-    this.platforms.push({ x: 0, y: 550, w: 350, h: 40, type: 'standard' });
-    this.generatedX = 350;
-
-    // Pre-generate chunk up to 3000px
-    this.generateAhead(3000);
+    this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
   }
 
-  generateAhead(targetX) {
-    while (this.generatedX < targetX) {
-      this.generateChunk();
-    }
-  }
+  // Generate a random piece shape populated with random bright colors per block cell
+  generateShape() {
+    const template = SHAPE_TEMPLATES[Math.floor(Math.random() * SHAPE_TEMPLATES.length)];
+    const shapeMatrix = [];
 
-  generateChunk() {
-    const chunkWidth = Math.floor(Math.random() * 200) + 350; // 350 - 550 px
-    const startX = this.generatedX;
-    const endX = startX + chunkWidth;
-
-    // Anchor point height variation
-    const anchorY = Math.floor(Math.random() * 120) + 160; // 160 - 280 px
-    const anchorX = startX + chunkWidth * 0.5;
-
-    this.anchors.push({
-      id: `a_${this.nextAnchorId++}`,
-      x: anchorX,
-      y: anchorY
-    });
-
-    // Randomize element type for this chunk
-    const roll = Math.random();
-
-    if (roll < 0.35) {
-      // Platform with coins
-      const platW = Math.floor(Math.random() * 120) + 120;
-      const platY = Math.floor(Math.random() * 100) + 550;
-      this.platforms.push({ x: startX + 50, y: platY, w: platW, h: 40, type: 'standard' });
-
-      // Spawn coins above platform
-      for (let i = 0; i < 3; i++) {
-        this.coins.push({ x: startX + 70 + i * 35, y: platY - 40, collected: false });
+    for (let r = 0; r < template.matrix.length; r++) {
+      const row = [];
+      for (let c = 0; c < template.matrix[r].length; c++) {
+        if (template.matrix[r][c] === 1) {
+          const colorObj = BLOCK_COLORS[Math.floor(Math.random() * BLOCK_COLORS.length)];
+          row.push(colorObj);
+        } else {
+          row.push(null);
+        }
       }
-    } else if (roll < 0.65) {
-      // Bouncy trampoline spring
-      const bounceX = startX + 100;
-      const bounceY = Math.floor(Math.random() * 80) + 620;
-      this.platforms.push({ x: bounceX, y: bounceY, w: 120, h: 30, type: 'bouncy' });
-
-      // Coins forming an arc above spring
-      this.coins.push({ x: bounceX + 30, y: bounceY - 80, collected: false });
-      this.coins.push({ x: bounceX + 60, y: bounceY - 110, collected: false });
-      this.coins.push({ x: bounceX + 90, y: bounceY - 80, collected: false });
-    } else {
-      // Spike hazard pit with coins high above
-      const hazardW = chunkWidth - 100;
-      this.hazards.push({ x: startX + 50, y: 880, w: hazardW, h: 60, type: 'spikes' });
-
-      // Coins along swing arc
-      this.coins.push({ x: anchorX - 50, y: anchorY + 160, collected: false });
-      this.coins.push({ x: anchorX, y: anchorY + 180, collected: false });
-      this.coins.push({ x: anchorX + 50, y: anchorY + 160, collected: false });
+      shapeMatrix.push(row);
     }
 
-    // Always ensure spikes exist in the bottom pit gap
-    this.hazards.push({ x: startX, y: 920, w: chunkWidth, h: 60, type: 'spikes' });
-
-    this.generatedX = endX;
+    return {
+      id: Math.random().toString(36).substring(2, 9),
+      name: template.name,
+      matrix: shapeMatrix,
+      rows: shapeMatrix.length,
+      cols: shapeMatrix[0].length
+    };
   }
 
-  // Cleanup old elements far behind camera to maintain performance
-  cleanupBehind(minX) {
-    this.anchors = this.anchors.filter(a => a.x >= minX);
-    this.platforms = this.platforms.filter(p => p.x + p.w >= minX);
-    this.hazards = this.hazards.filter(h => h.x + h.w >= minX);
-    this.coins = this.coins.filter(c => c.x >= minX);
+  // Check if shape can be placed at grid position (startRow, startCol)
+  canPlaceShape(shape, startRow, startCol) {
+    for (let r = 0; r < shape.rows; r++) {
+      for (let c = 0; c < shape.cols; c++) {
+        if (shape.matrix[r][c]) {
+          const gridR = startRow + r;
+          const gridC = startCol + c;
+
+          if (gridR < 0 || gridR >= this.rows || gridC < 0 || gridC >= this.cols) {
+            return false;
+          }
+          if (this.grid[gridR][gridC] !== null) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  // Place shape onto grid at (startRow, startCol)
+  placeShape(shape, startRow, startCol) {
+    if (!this.canPlaceShape(shape, startRow, startCol)) return false;
+
+    let blocksPlaced = 0;
+    for (let r = 0; r < shape.rows; r++) {
+      for (let c = 0; c < shape.cols; c++) {
+        const block = shape.matrix[r][c];
+        if (block) {
+          this.grid[startRow + r][startCol + c] = { ...block };
+          blocksPlaced++;
+        }
+      }
+    }
+    return blocksPlaced;
+  }
+
+  // Check if any shape in tray can fit anywhere on the board
+  hasAnyValidMove(trayShapes) {
+    for (const shape of trayShapes) {
+      if (!shape) continue;
+      for (let r = 0; r <= this.rows - shape.rows; r++) {
+        for (let c = 0; c <= this.cols - shape.cols; c++) {
+          if (this.canPlaceShape(shape, r, c)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // Find all connected components of 3 or more same-color adjacent blocks (using BFS / Flood Fill)
+  findMatches() {
+    const visited = Array.from({ length: this.rows }, () => Array(this.cols).fill(false));
+    const matchedCoords = new Set();
+    const clusters = [];
+
+    const directions = [
+      [-1, 0], [1, 0], [0, -1], [0, 1] // UP, DOWN, LEFT, RIGHT
+    ];
+
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const block = this.grid[r][c];
+        if (block !== null && !visited[r][c]) {
+          // Start BFS cluster detection
+          const cluster = [];
+          const queue = [[r, c]];
+          visited[r][c] = true;
+          const colorId = block.id;
+
+          while (queue.length > 0) {
+            const [currR, currC] = queue.shift();
+            cluster.push({ r: currR, c: currC, block });
+
+            for (const [dr, dc] of directions) {
+              const nr = currR + dr;
+              const nc = currC + dc;
+
+              if (
+                nr >= 0 && nr < this.rows &&
+                nc >= 0 && nc < this.cols &&
+                !visited[nr][nc] &&
+                this.grid[nr][nc] !== null &&
+                this.grid[nr][nc].id === colorId
+              ) {
+                visited[nr][nc] = true;
+                queue.push([nr, nc]);
+              }
+            }
+          }
+
+          if (cluster.length >= 3) {
+            clusters.push(cluster);
+            for (const item of cluster) {
+              matchedCoords.add(`${item.r},${item.c}`);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      clusters,
+      matchedCoords: Array.from(matchedCoords).map(key => {
+        const [r, c] = key.split(',').map(Number);
+        return { r, c };
+      })
+    };
+  }
+
+  // Clear matched blocks from grid
+  clearMatchedBlocks(matchedCoords) {
+    for (const { r, c } of matchedCoords) {
+      this.grid[r][c] = null;
+    }
   }
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = InfiniteLevelGenerator;
+  module.exports = { BLOCK_COLORS, SHAPE_TEMPLATES, ColorMatchEngine };
 } else {
-  window.InfiniteLevelGenerator = InfiniteLevelGenerator;
+  window.BLOCK_COLORS = BLOCK_COLORS;
+  window.SHAPE_TEMPLATES = SHAPE_TEMPLATES;
+  window.ColorMatchEngine = ColorMatchEngine;
 }

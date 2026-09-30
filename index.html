@@ -3,48 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Tail Swing - Endless Mini Pals</title>
+  <title>1010 Color Match - Kids Puzzle Game</title>
   <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="game-container">
-    <canvas id="gameCanvas"></canvas>
-
-    <!-- HUD Overlay -->
-    <div id="hud" class="overlay">
-      <div class="hud-top">
-        <div class="hud-box" id="hud-score">Distance: <span id="dist-count">0</span>m</div>
-        <div class="hud-box" id="hud-coins">🪙 <span id="coin-count">0</span></div>
-        <div class="hud-buttons">
-          <button id="btn-sound" class="icon-btn">🔊</button>
-          <button id="btn-pause" class="icon-btn">⏸️</button>
+    <!-- Main Header / HUD -->
+    <header id="game-header">
+      <div class="header-left">
+        <h1 class="logo-title">1010 COLOR MATCH</h1>
+      </div>
+      <div class="header-center">
+        <div class="score-badge">
+          <span class="badge-label">SCORE</span>
+          <span id="score-count" class="badge-value">0</span>
+        </div>
+        <div class="score-badge best-badge">
+          <span class="badge-label">BEST</span>
+          <span id="best-score" class="badge-value">0</span>
         </div>
       </div>
-      <div id="tutorial-msg" class="tutorial-text">Hold Click / Spacebar to Swing endlessly!</div>
-    </div>
+      <div class="header-right">
+        <button id="btn-sound" class="icon-btn" title="Toggle Sound">🔊</button>
+        <button id="btn-pause" class="icon-btn" title="Pause Game">⏸️</button>
+      </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main id="game-layout">
+      <!-- 10x10 Grid Board Container -->
+      <div id="board-container">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+      </div>
+
+      <!-- Shapes Tray / Dock -->
+      <div id="tray-container">
+        <div class="tray-header">DRAG SHAPES TO THE BOARD!</div>
+        <div id="shapes-tray" class="shapes-tray">
+          <canvas id="shapeCanvas0" class="shape-canvas" width="130" height="130"></canvas>
+          <canvas id="shapeCanvas1" class="shape-canvas" width="130" height="130"></canvas>
+          <canvas id="shapeCanvas2" class="shape-canvas" width="130" height="130"></canvas>
+        </div>
+      </div>
+    </main>
 
     <!-- Main Menu Overlay -->
     <div id="menu-overlay" class="overlay screen-overlay active">
-      <div class="menu-card">
-        <h1 class="game-title">TAIL SWING</h1>
-        <p class="subtitle">Endless Adventure</p>
-        <div class="high-score-badge">BEST: <span id="best-score-menu">0</span>m</div>
+      <div class="menu-card pulse-card">
+        <div class="banner-icon">🧩🎨</div>
+        <h1 class="game-title">1010 COLOR MATCH</h1>
+        <p class="subtitle">Match 3+ colorful blocks to clear them!</p>
+        <div class="high-score-badge">BEST SCORE: <span id="best-score-menu">0</span></div>
         <div class="menu-buttons">
-          <button id="btn-play" class="btn primary-btn">PLAY</button>
-          <button id="btn-shop-menu" class="btn secondary-btn">SHOP 🐾</button>
+          <button id="btn-play" class="btn primary-btn btn-bounce">PLAY NOW!</button>
         </div>
-      </div>
-    </div>
-
-    <!-- Shop Overlay -->
-    <div id="shop-overlay" class="overlay screen-overlay hidden">
-      <div class="menu-card wide-card">
-        <div class="shop-header">
-          <h2>MINI PALS SHOP</h2>
-          <div class="shop-coins">🪙 <span id="shop-coin-count">0</span></div>
-        </div>
-        <div id="shop-grid" class="shop-grid"></div>
-        <button id="btn-shop-back" class="btn secondary-btn">BACK</button>
       </div>
     </div>
 
@@ -63,23 +76,21 @@
     <!-- Game Over / Result Overlay -->
     <div id="result-overlay" class="overlay screen-overlay hidden">
       <div class="menu-card">
-        <h2 id="result-title">GAME OVER</h2>
+        <h2 id="result-title">NO MORE MOVES!</h2>
         <div class="result-stats">
-          <p>Distance: <strong id="final-dist">0</strong>m</p>
-          <p>Best Record: <strong id="best-dist">0</strong>m</p>
-          <p>Coins Collected: +<span id="earned-coins">0</span></p>
+          <p>Final Score: <strong id="final-score">0</strong></p>
+          <p>Best Score: <strong id="best-dist">0</strong></p>
         </div>
         <div class="menu-buttons">
-          <button id="btn-restart-result" class="btn primary-btn">PLAY AGAIN</button>
+          <button id="btn-restart-result" class="btn primary-btn btn-bounce">PLAY AGAIN</button>
           <button id="btn-menu-result" class="btn secondary-btn">MAIN MENU</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="physics.js"></script>
-  <script src="levels.js"></script>
   <script src="audio.js"></script>
+  <script src="levels.js"></script>
   <script src="ui.js"></script>
   <script src="game.js"></script>
 </body>

@@ -1,80 +1,20 @@
 /**
- * Tail Swing - UI & Character Shop Manager (Endless Mode)
+ * 1010 Color Match - UI Manager & Renderer
  */
 
 class UIManager {
   constructor(game) {
     this.game = game;
-    this.characterImages = {};
-    this.unlockedSkins = JSON.parse(localStorage.getItem('tailswing_unlocked_skins')) || [1];
-    this.selectedSkin = parseInt(localStorage.getItem('tailswing_selected_skin')) || 1;
-    this.coins = parseInt(localStorage.getItem('tailswing_coins')) || 0;
-    this.bestScore = parseInt(localStorage.getItem('tailswing_best_score')) || 0;
+    this.canvas = document.getElementById('gameCanvas');
+    this.ctx = this.canvas.getContext('2d');
 
-    this.skinCosts = {};
-    for (let i = 1; i <= 20; i++) {
-      this.skinCosts[i] = i === 1 ? 0 : (i - 1) * 10;
-    }
-
-    this.preloadCharacterImages();
     this.setupEventListeners();
-    this.updateHUD();
-  }
-
-  preloadCharacterImages() {
-    for (let i = 1; i <= 20; i++) {
-      this.characterImages[i] = {
-        head: new Image(),
-        torso: new Image(),
-        leftHand: new Image(),
-        rightHand: new Image(),
-        leftFoot: new Image(),
-        rightFoot: new Image()
-      };
-
-      const basePath = `assets/players/player_${i}`;
-      this.characterImages[i].head.src = `${basePath}/HEAD.png`;
-      this.characterImages[i].torso.src = `${basePath}/TORSO.png`;
-      this.characterImages[i].leftHand.src = `${basePath}/LEFT HAND.png`;
-      this.characterImages[i].rightHand.src = `${basePath}/RIGHT HAND.png`;
-      this.characterImages[i].leftFoot.src = `${basePath}/LEFT FOOT.png`;
-      this.characterImages[i].rightFoot.src = `${basePath}/RIGHT FOOT.png`;
-    }
-  }
-
-  saveData() {
-    localStorage.setItem('tailswing_unlocked_skins', JSON.stringify(this.unlockedSkins));
-    localStorage.setItem('tailswing_selected_skin', this.selectedSkin);
-    localStorage.setItem('tailswing_coins', this.coins);
-    localStorage.setItem('tailswing_best_score', this.bestScore);
-  }
-
-  addCoins(amount) {
-    this.coins += amount;
-    this.saveData();
-    this.updateHUD();
-  }
-
-  updateHUD() {
-    document.getElementById('coin-count').textContent = this.coins;
-    document.getElementById('shop-coin-count').textContent = this.coins;
-    document.getElementById('dist-count').textContent = this.game.distanceScore || 0;
-    document.getElementById('best-score-menu').textContent = this.bestScore;
   }
 
   setupEventListeners() {
     document.getElementById('btn-play').addEventListener('click', () => {
-      this.game.startLevel();
+      this.game.startNewGame();
       this.showScreen(null);
-    });
-
-    document.getElementById('btn-shop-menu').addEventListener('click', () => {
-      this.renderShopGrid();
-      this.showScreen('shop-overlay');
-    });
-
-    document.getElementById('btn-shop-back').addEventListener('click', () => {
-      this.showScreen('menu-overlay');
     });
 
     document.getElementById('btn-pause').addEventListener('click', () => {
@@ -88,7 +28,7 @@ class UIManager {
     });
 
     document.getElementById('btn-restart-pause').addEventListener('click', () => {
-      this.game.startLevel();
+      this.game.startNewGame();
       this.showScreen(null);
     });
 
@@ -97,7 +37,7 @@ class UIManager {
     });
 
     document.getElementById('btn-restart-result').addEventListener('click', () => {
-      this.game.startLevel();
+      this.game.startNewGame();
       this.showScreen(null);
     });
 
@@ -114,7 +54,7 @@ class UIManager {
   }
 
   showScreen(screenId) {
-    const overlays = ['menu-overlay', 'shop-overlay', 'pause-overlay', 'result-overlay'];
+    const overlays = ['menu-overlay', 'pause-overlay', 'result-overlay'];
     overlays.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
@@ -129,90 +69,173 @@ class UIManager {
     });
   }
 
-  showGameOverScreen(distance, earnedCoins) {
-    if (distance > this.bestScore) {
-      this.bestScore = distance;
-    }
-    this.addCoins(earnedCoins);
-    this.saveData();
+  updateScores(score, highScore) {
+    document.getElementById('score-count').textContent = score;
+    document.getElementById('best-score').textContent = highScore;
+    document.getElementById('best-score-menu').textContent = highScore;
+  }
 
-    document.getElementById('final-dist').textContent = distance;
-    document.getElementById('best-dist').textContent = this.bestScore;
-    document.getElementById('earned-coins').textContent = earnedCoins;
-
+  showGameOverScreen(score, highScore) {
+    document.getElementById('final-score').textContent = score;
+    document.getElementById('best-dist').textContent = highScore;
     this.showScreen('result-overlay');
   }
 
-  renderShopGrid() {
-    const grid = document.getElementById('shop-grid');
-    grid.innerHTML = '';
-    document.getElementById('shop-coin-count').textContent = this.coins;
+  // Render shapes inside tray canvases
+  renderTray(trayShapes) {
+    for (let i = 0; i < 3; i++) {
+      const shapeCanvas = document.getElementById(`shapeCanvas${i}`);
+      if (!shapeCanvas) continue;
+      const ctx = shapeCanvas.getContext('2d');
+      ctx.clearRect(0, 0, shapeCanvas.width, shapeCanvas.height);
 
-    for (let i = 1; i <= 20; i++) {
-      const card = document.createElement('div');
-      card.className = 'shop-card';
-      const isUnlocked = this.unlockedSkins.includes(i);
-      const isSelected = this.selectedSkin === i;
+      const shape = trayShapes[i];
+      if (!shape) continue;
 
-      if (isSelected) card.classList.add('selected');
-      if (!isUnlocked) card.classList.add('locked');
+      const maxDim = Math.max(shape.rows, shape.cols);
+      const blockSize = Math.min(100 / maxDim, 32);
 
-      const img = document.createElement('img');
-      img.className = 'shop-preview';
-      img.src = `assets/players/player_${i}/HEAD.png`;
+      const offsetX = (shapeCanvas.width - shape.cols * blockSize) / 2;
+      const offsetY = (shapeCanvas.height - shape.rows * blockSize) / 2;
 
-      const costText = document.createElement('div');
-      costText.className = 'shop-cost';
-
-      if (isSelected) {
-        costText.textContent = 'EQUIPPED';
-      } else if (isUnlocked) {
-        costText.textContent = 'SELECT';
-      } else {
-        costText.textContent = `🪙 ${this.skinCosts[i]}`;
-      }
-
-      card.appendChild(img);
-      card.appendChild(costText);
-
-      card.addEventListener('click', () => {
-        if (isUnlocked) {
-          this.selectedSkin = i;
-          this.saveData();
-          this.renderShopGrid();
-        } else if (this.coins >= this.skinCosts[i]) {
-          this.coins -= this.skinCosts[i];
-          this.unlockedSkins.push(i);
-          this.selectedSkin = i;
-          this.saveData();
-          this.renderShopGrid();
+      for (let r = 0; r < shape.rows; r++) {
+        for (let c = 0; c < shape.cols; c++) {
+          const block = shape.matrix[r][c];
+          if (block) {
+            this.drawBlock(ctx, offsetX + c * blockSize, offsetY + r * blockSize, blockSize, block);
+          }
         }
-      });
-
-      grid.appendChild(card);
+      }
     }
   }
 
-  drawPlayerAvatar(ctx, x, y, skinId, angle, scale = 1, isSwinging = false) {
-    const imgs = this.characterImages[skinId] || this.characterImages[1];
+  // Draw 10x10 board, placed blocks, hover preview, drag preview, particles & popups
+  renderBoard(engine, particles = [], draggingShape = null, hoverCell = null, dragPos = { x: 0, y: 0 }, scorePopups = []) {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    const rows = engine.rows;
+    const cols = engine.cols;
+    const cellSize = this.canvas.width / cols;
+
+    // Draw Grid Background Cells
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = c * cellSize;
+        const y = r * cellSize;
+
+        this.ctx.fillStyle = (r + c) % 2 === 0 ? '#f0f4f8' : '#e1e8ed';
+        this.ctx.beginPath();
+        this.ctx.roundRect(x + 2, y + 2, cellSize - 4, cellSize - 4, 8);
+        this.ctx.fill();
+      }
+    }
+
+    // Draw Placed Blocks
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const block = engine.grid[r][c];
+        if (block) {
+          const x = c * cellSize;
+          const y = r * cellSize;
+          this.drawBlock(this.ctx, x + 2, y + 2, cellSize - 4, block);
+        }
+      }
+    }
+
+    // Draw Hover Preview
+    if (draggingShape && hoverCell) {
+      const { r: startRow, c: startCol, valid } = hoverCell;
+      for (let r = 0; r < draggingShape.rows; r++) {
+        for (let c = 0; c < draggingShape.cols; c++) {
+          const block = draggingShape.matrix[r][c];
+          if (block) {
+            const gridR = startRow + r;
+            const gridC = startCol + c;
+            if (gridR >= 0 && gridR < rows && gridC >= 0 && gridC < cols) {
+              const x = gridC * cellSize;
+              const y = gridR * cellSize;
+
+              this.ctx.fillStyle = valid ? 'rgba(76, 175, 80, 0.4)' : 'rgba(244, 67, 54, 0.4)';
+              this.ctx.strokeStyle = valid ? '#2e7d32' : '#c62828';
+              this.ctx.lineWidth = 3;
+              this.ctx.beginPath();
+              this.ctx.roundRect(x + 3, y + 3, cellSize - 6, cellSize - 6, 8);
+              this.ctx.fill();
+              this.ctx.stroke();
+            }
+          }
+        }
+      }
+    }
+
+    // Draw Dragging Shape attached to cursor/pointer
+    if (draggingShape && dragPos) {
+      const shapeWidth = draggingShape.cols * cellSize;
+      const shapeHeight = draggingShape.rows * cellSize;
+      const startX = dragPos.x - shapeWidth / 2;
+      const startY = dragPos.y - shapeHeight / 2;
+
+      for (let r = 0; r < draggingShape.rows; r++) {
+        for (let c = 0; c < draggingShape.cols; c++) {
+          const block = draggingShape.matrix[r][c];
+          if (block) {
+            this.drawBlock(this.ctx, startX + c * cellSize, startY + r * cellSize, cellSize - 4, block, 0.85);
+          }
+        }
+      }
+    }
+
+    // Draw Burst Particles
+    if (particles) {
+      for (const p of particles) {
+        this.ctx.save();
+        this.ctx.globalAlpha = p.life;
+        this.ctx.fillStyle = p.color;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.restore();
+      }
+    }
+
+    // Draw Score Popups
+    if (scorePopups) {
+      for (const pop of scorePopups) {
+        this.ctx.save();
+        this.ctx.globalAlpha = pop.life;
+        this.ctx.font = 'bold 22px Fredoka One, sans-serif';
+        this.ctx.fillStyle = '#ff9800';
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 4;
+        this.ctx.textAlign = 'center';
+        this.ctx.strokeText(pop.text, pop.x, pop.y);
+        this.ctx.fillText(pop.text, pop.x, pop.y);
+        this.ctx.restore();
+      }
+    }
+  }
+
+  // Helper method to draw a single rounded colorful block
+  drawBlock(ctx, x, y, size, block, alpha = 1.0) {
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
 
-    const head = imgs.head;
-    const torso = imgs.torso;
-    const lHand = imgs.leftHand;
-    const rHand = imgs.rightHand;
-    const lFoot = imgs.leftFoot;
-    const rFoot = imgs.rightFoot;
+    // Main Fill
+    ctx.fillStyle = block.fill;
+    ctx.beginPath();
+    ctx.roundRect(x, y, size, size, 10);
+    ctx.fill();
 
-    if (lFoot.complete) ctx.drawImage(lFoot, -16, 10, 16, 16);
-    if (rFoot.complete) ctx.drawImage(rFoot, 0, 10, 16, 16);
-    if (torso.complete) ctx.drawImage(torso, -16, -16, 32, 32);
-    if (head.complete) ctx.drawImage(head, -20, -38, 40, 40);
-    if (lHand.complete) ctx.drawImage(lHand, -26, -10, 16, 16);
-    if (rHand.complete) ctx.drawImage(rHand, 10, -10, 16, 16);
+    // Border
+    ctx.strokeStyle = block.stroke;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Inner Highlight Top Curve
+    ctx.fillStyle = block.light;
+    ctx.beginPath();
+    ctx.roundRect(x + 4, y + 4, size - 8, (size - 8) * 0.35, [6, 6, 2, 2]);
+    ctx.fill();
 
     ctx.restore();
   }
